@@ -602,13 +602,15 @@ async def anthropic_proxy_route(
 
     ## Build custom headers
     custom_headers = {}
+    forward_headers = True
 
     if anthropic_api_key is not None:
         # Claude Code OAuth tokens require Bearer auth
         if anthropic_api_key.startswith("sk-ant-oat01-"):
             custom_headers["authorization"] = f"Bearer {anthropic_api_key}"
-            # Also set x-api-key to override any forwarded client key
-            custom_headers["x-api-key"] = anthropic_api_key
+            # Don't forward client headers when using OAuth - the x-api-key from client
+            # would be forwarded and Anthropic rejects OAuth tokens in x-api-key header
+            forward_headers = False
         elif (
             "authorization" not in request.headers
             and "x-api-key" not in request.headers
@@ -620,7 +622,7 @@ async def anthropic_proxy_route(
         endpoint=endpoint,
         target=str(updated_url),
         custom_headers=custom_headers,
-        _forward_headers=True,
+        _forward_headers=forward_headers,
         is_streaming_request=is_streaming_request,
     )  # dynamically construct pass-through endpoint based on incoming path
     received_value = await endpoint_func(

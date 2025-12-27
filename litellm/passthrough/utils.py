@@ -46,6 +46,7 @@ class BasePassthroughUtils:
         request_headers: dict,
         headers: dict,
         forward_headers: Optional[bool] = False,
+        exclude_headers: Optional[List[str]] = None,
     ):
         """
         Helper to forward headers from original request.
@@ -53,6 +54,12 @@ class BasePassthroughUtils:
         Filters out headers that should not be sent to upstream providers,
         including IP-related headers to prevent leaking client information
         (unless litellm.forward_client_ip_to_provider is True).
+
+        Args:
+            request_headers: Original request headers
+            headers: Custom headers that will override forwarded headers
+            forward_headers: Whether to forward request headers
+            exclude_headers: Additional headers to exclude (case-insensitive)
         """
         if forward_headers is True:
             # Always filter headers that would break HTTP semantics
@@ -61,6 +68,10 @@ class BasePassthroughUtils:
             # Filter IP headers unless explicitly enabled
             if not litellm.forward_client_ip_to_provider:
                 headers_to_filter.extend(BasePassthroughUtils.CLIENT_IP_HEADERS)
+
+            # Add any extra headers to exclude
+            if exclude_headers:
+                headers_to_filter.extend([h.lower() for h in exclude_headers])
 
             # Filter out headers (case-insensitive matching)
             filtered_headers = {
