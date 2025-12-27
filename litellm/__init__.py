@@ -315,6 +315,7 @@ default_soft_budget: float = (
     DEFAULT_SOFT_BUDGET  # by default all litellm proxy keys have a soft budget of 50.0
 )
 forward_traceparent_to_llm_provider: bool = False
+forward_client_ip_to_provider: bool = False  # when True, forwards client IP headers (X-Forwarded-For, etc.) to LLM providers
 
 
 _current_cost = 0.0  # private variable, used if max budget is set

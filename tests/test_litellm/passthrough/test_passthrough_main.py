@@ -508,3 +508,175 @@ def test_azure_with_custom_api_base_and_key():
         assert json_body["model"] == "gpt-4.1"
 
         assert response.status_code == 200
+
+
+class TestClientIpHeaderFiltering:
+    """Test that client IP headers are filtered by default in pass-through endpoints."""
+
+    def test_ip_headers_filtered_by_default(self):
+        """
+        Test that IP-related headers are filtered out by default when forwarding headers.
+
+        This prevents client IP addresses from being leaked to upstream providers
+        when using pass-through endpoints.
+        """
+        from litellm.passthrough.utils import BasePassthroughUtils
+
+        # Ensure default behavior (IP headers filtered)
+        original_value = litellm.forward_client_ip_to_provider
+        litellm.forward_client_ip_to_provider = False
+
+        try:
+            # Simulate request headers including IP-related headers
+            request_headers = {
+                "authorization": "Bearer test-token",
+                "content-type": "application/json",
+                # IP-related headers that should be filtered
+                "x-forwarded-for": "192.168.1.100, 10.0.0.1",
+                "x-real-ip": "192.168.1.100",
+                "cf-connecting-ip": "203.0.113.50",
+                "true-client-ip": "203.0.113.50",
+                "x-client-ip": "192.168.1.100",
+                "forwarded": "for=192.168.1.100;proto=https",
+                # Headers that should be kept
+                "accept": "application/json",
+                "user-agent": "test-client/1.0",
+            }
+
+            custom_headers = {"x-custom": "value"}
+
+            result = BasePassthroughUtils.forward_headers_from_request(
+                request_headers=request_headers.copy(),
+                headers=custom_headers.copy(),
+                forward_headers=True,
+            )
+
+            # Verify IP-related headers are NOT in the result
+            assert "x-forwarded-for" not in result
+            assert "x-real-ip" not in result
+            assert "cf-connecting-ip" not in result
+            assert "true-client-ip" not in result
+            assert "x-client-ip" not in result
+            assert "forwarded" not in result
+
+            # Verify legitimate headers ARE forwarded
+            assert result["authorization"] == "Bearer test-token"
+            assert result["content-type"] == "application/json"
+            assert result["accept"] == "application/json"
+            assert result["user-agent"] == "test-client/1.0"
+            assert result["x-custom"] == "value"
+        finally:
+            litellm.forward_client_ip_to_provider = original_value
+
+    def test_ip_headers_forwarded_when_config_enabled(self):
+        """
+        Test that IP-related headers ARE forwarded when
+        litellm.forward_client_ip_to_provider is True.
+        """
+        from litellm.passthrough.utils import BasePassthroughUtils
+
+        original_value = litellm.forward_client_ip_to_provider
+        litellm.forward_client_ip_to_provider = True
+
+        try:
+            request_headers = {
+                "authorization": "Bearer token",
+                "x-forwarded-for": "192.168.1.100, 10.0.0.1",
+                "x-real-ip": "192.168.1.100",
+                "cf-connecting-ip": "203.0.113.50",
+            }
+
+            result = BasePassthroughUtils.forward_headers_from_request(
+                request_headers=request_headers.copy(),
+                headers={},
+                forward_headers=True,
+            )
+
+            # Verify IP-related headers ARE in the result when config is enabled
+            assert result["x-forwarded-for"] == "192.168.1.100, 10.0.0.1"
+            assert result["x-real-ip"] == "192.168.1.100"
+            assert result["cf-connecting-ip"] == "203.0.113.50"
+            assert result["authorization"] == "Bearer token"
+        finally:
+            litellm.forward_client_ip_to_provider = original_value
+
+    def test_ip_headers_filtered_case_insensitive(self):
+        """
+        Test that IP header filtering is case-insensitive.
+        """
+        from litellm.passthrough.utils import BasePassthroughUtils
+
+        original_value = litellm.forward_client_ip_to_provider
+        litellm.forward_client_ip_to_provider = False
+
+        try:
+            # Test with various case combinations
+            request_headers = {
+                "X-Forwarded-For": "192.168.1.100",
+                "X-REAL-IP": "192.168.1.100",
+                "CF-Connecting-IP": "203.0.113.50",
+                "Forwarded": "for=192.168.1.100",
+            }
+
+            result = BasePassthroughUtils.forward_headers_from_request(
+                request_headers=request_headers.copy(),
+                headers={},
+                forward_headers=True,
+            )
+
+            # All should be filtered regardless of case
+            assert len(result) == 0
+        finally:
+            litellm.forward_client_ip_to_provider = original_value
+
+    def test_content_length_and_host_always_filtered(self):
+        """
+        Test that content-length and host are always filtered,
+        even when forward_client_ip_to_provider is True.
+        """
+        from litellm.passthrough.utils import BasePassthroughUtils
+
+        original_value = litellm.forward_client_ip_to_provider
+        litellm.forward_client_ip_to_provider = True
+
+        try:
+            request_headers = {
+                "content-length": "100",
+                "host": "example.com",
+                "authorization": "Bearer token",
+            }
+
+            result = BasePassthroughUtils.forward_headers_from_request(
+                request_headers=request_headers.copy(),
+                headers={},
+                forward_headers=True,
+            )
+
+            # content-length and host should always be filtered
+            assert "content-length" not in result
+            assert "host" not in result
+            assert result["authorization"] == "Bearer token"
+        finally:
+            litellm.forward_client_ip_to_provider = original_value
+
+    def test_forward_headers_false_no_forwarding(self):
+        """
+        Test that when forward_headers=False, no request headers are forwarded.
+        """
+        from litellm.passthrough.utils import BasePassthroughUtils
+
+        request_headers = {
+            "authorization": "Bearer token",
+            "x-forwarded-for": "192.168.1.100",
+        }
+
+        custom_headers = {"x-custom": "value"}
+
+        result = BasePassthroughUtils.forward_headers_from_request(
+            request_headers=request_headers.copy(),
+            headers=custom_headers.copy(),
+            forward_headers=False,
+        )
+
+        # Only custom headers should be present
+        assert result == {"x-custom": "value"}

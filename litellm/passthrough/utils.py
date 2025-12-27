@@ -3,6 +3,8 @@ from urllib.parse import parse_qs
 
 import httpx
 
+import litellm
+
 
 class BasePassthroughUtils:
     @staticmethod
@@ -20,6 +22,25 @@ class BasePassthroughUtils:
         # Merge the query params, giving priority to the existing ones
         return {**request_query_params, **updated_existing_query_params}
 
+    # Headers that are never forwarded (would break HTTP semantics)
+    HEADERS_NEVER_FORWARD = ["content-length", "host"]
+
+    # Headers that expose client IP addresses
+    CLIENT_IP_HEADERS = [
+        "x-forwarded-for",
+        "x-real-ip",
+        "x-forwarded-host",
+        "x-forwarded-proto",
+        "x-forwarded-scheme",
+        "x-forwarded-server",
+        "x-client-ip",
+        "x-cluster-client-ip",
+        "cf-connecting-ip",  # Cloudflare
+        "true-client-ip",  # Akamai/Cloudflare
+        "x-original-forwarded-for",
+        "forwarded",  # RFC 7239 standard header
+    ]
+
     @staticmethod
     def forward_headers_from_request(
         request_headers: dict,
@@ -27,15 +48,29 @@ class BasePassthroughUtils:
         forward_headers: Optional[bool] = False,
     ):
         """
-        Helper to forward headers from original request
+        Helper to forward headers from original request.
+
+        Filters out headers that should not be sent to upstream providers,
+        including IP-related headers to prevent leaking client information
+        (unless litellm.forward_client_ip_to_provider is True).
         """
         if forward_headers is True:
-            # Header We Should NOT forward
-            request_headers.pop("content-length", None)
-            request_headers.pop("host", None)
+            # Always filter headers that would break HTTP semantics
+            headers_to_filter = BasePassthroughUtils.HEADERS_NEVER_FORWARD.copy()
 
-            # Combine request headers with custom headers
-            headers = {**request_headers, **headers}
+            # Filter IP headers unless explicitly enabled
+            if not litellm.forward_client_ip_to_provider:
+                headers_to_filter.extend(BasePassthroughUtils.CLIENT_IP_HEADERS)
+
+            # Filter out headers (case-insensitive matching)
+            filtered_headers = {
+                k: v
+                for k, v in request_headers.items()
+                if k.lower() not in headers_to_filter
+            }
+
+            # Combine filtered request headers with custom headers
+            headers = {**filtered_headers, **headers}
         return headers
 
 class CommonUtils:
