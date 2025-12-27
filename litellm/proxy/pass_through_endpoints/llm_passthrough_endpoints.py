@@ -612,9 +612,20 @@ async def anthropic_proxy_route(
             # This prevents the client's x-api-key from being forwarded
             forward_headers = False
             # Copy essential headers from request
-            for header_name in ["content-type", "accept", "anthropic-version", "anthropic-beta", "user-agent"]:
+            for header_name in ["content-type", "accept", "anthropic-version", "user-agent"]:
                 if header_name in request.headers:
                     custom_headers[header_name] = request.headers[header_name]
+            # Add OAuth beta header - required for OAuth authentication
+            # Merge with any existing anthropic-beta header from request
+            existing_beta = request.headers.get("anthropic-beta", "")
+            oauth_beta = "oauth-2025-04-20"
+            if existing_beta:
+                if oauth_beta not in existing_beta:
+                    custom_headers["anthropic-beta"] = f"{existing_beta},{oauth_beta}"
+                else:
+                    custom_headers["anthropic-beta"] = existing_beta
+            else:
+                custom_headers["anthropic-beta"] = oauth_beta
         elif (
             "authorization" not in request.headers
             and "x-api-key" not in request.headers
