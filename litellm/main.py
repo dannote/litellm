@@ -2746,6 +2746,56 @@ def completion(  # type: ignore # noqa: PLR0915
                 provider_config=provider_config,
                 logging_obj=logging,  # model call logging done inside the class as we make need to modify I/O to fit aleph alpha's requirements
             )
+        elif custom_llm_provider == "yandex":
+            from litellm.llms.yandex.common_utils import YandexModelInfo
+
+            yandex_key = (
+                api_key
+                or get_secret_str("YANDEX_API_KEY")
+                or litellm.api_key
+            )
+
+            api_base = (
+                api_base
+                or litellm.api_base
+                or get_secret_str("YANDEX_API_BASE")
+                or "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
+            )
+
+            # Get folder_id from kwargs, litellm_params, or environment
+            folder_id = (
+                kwargs.get("folder_id")
+                or litellm_params.get("folder_id")
+                or YandexModelInfo.get_folder_id()
+            )
+            if folder_id:
+                litellm_params["folder_id"] = folder_id
+
+            headers = headers or litellm.headers or {}
+            if headers is None:
+                headers = {}
+
+            if extra_headers is not None:
+                headers.update(extra_headers)
+
+            response = base_llm_http_handler.completion(
+                model=model,
+                stream=stream,
+                messages=messages,
+                acompletion=acompletion,
+                api_base=api_base,
+                model_response=model_response,
+                optional_params=optional_params,
+                litellm_params=litellm_params,
+                shared_session=shared_session,
+                custom_llm_provider="yandex",
+                timeout=timeout,
+                headers=headers,
+                encoding=_get_encoding(),
+                api_key=yandex_key,
+                provider_config=provider_config,
+                logging_obj=logging,
+            )
         elif custom_llm_provider == "maritalk":
             maritalk_key = (
                 api_key

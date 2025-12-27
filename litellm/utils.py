@@ -7319,6 +7319,8 @@ class ProviderConfigManager:
             return litellm.XAIChatConfig()
         elif litellm.LlmProviders.ZAI == provider:
             return litellm.ZAIChatConfig()
+        elif litellm.LlmProviders.YANDEX == provider:
+            return litellm.YandexChatConfig()
         elif litellm.LlmProviders.LAMBDA_AI == provider:
             return litellm.LambdaAIChatConfig()
         elif litellm.LlmProviders.LLAMA == provider:

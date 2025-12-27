@@ -1300,6 +1300,7 @@ if TYPE_CHECKING:
     from .llms.sagemaker.completion.transformation import SagemakerConfig as SagemakerConfig
     from .llms.sagemaker.chat.transformation import SagemakerChatConfig as SagemakerChatConfig
     from .llms.cohere.chat.transformation import CohereChatConfig as CohereChatConfig
+    from .llms.yandex.chat.transformation import YandexChatConfig as YandexChatConfig
     from .llms.anthropic.experimental_pass_through.messages.transformation import AnthropicMessagesConfig as AnthropicMessagesConfig
     from .llms.bedrock.messages.invoke_transformations.anthropic_claude3_transformation import AmazonAnthropicClaudeMessagesConfig as AmazonAnthropicClaudeMessagesConfig
     from .llms.together_ai.chat import TogetherAIConfig as TogetherAIConfig
