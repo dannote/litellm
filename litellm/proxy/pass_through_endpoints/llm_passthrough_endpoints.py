@@ -600,14 +600,18 @@ async def anthropic_proxy_route(
     ## check for streaming
     is_streaming_request = await is_streaming_request_fn(request)
 
-    ## Build custom headers - only inject server API key if client doesn't provide auth
+    ## Build custom headers
     custom_headers = {}
-    if (
-        "authorization" not in request.headers
-        and "x-api-key" not in request.headers
-        and anthropic_api_key is not None
-    ):
-        custom_headers["x-api-key"] = "{}".format(anthropic_api_key)
+
+    if anthropic_api_key is not None:
+        # Claude Code OAuth tokens require Bearer auth
+        if anthropic_api_key.startswith("sk-ant-oat01-"):
+            custom_headers["authorization"] = f"Bearer {anthropic_api_key}"
+        elif (
+            "authorization" not in request.headers
+            and "x-api-key" not in request.headers
+        ):
+            custom_headers["x-api-key"] = "{}".format(anthropic_api_key)
 
     ## CREATE PASS-THROUGH
     endpoint_func = create_pass_through_route(
