@@ -600,51 +600,37 @@ async def anthropic_proxy_route(
     ## check for streaming
     is_streaming_request = await is_streaming_request_fn(request)
 
-    ## Build custom headers
+    ## Build custom headers - manually construct headers for OAuth case
     custom_headers = {}
-    # Headers to exclude from forwarding (will be overridden by custom_headers)
-    exclude_auth_headers = False
+    forward_headers = True
 
     if anthropic_api_key is not None:
         # Claude Code OAuth tokens require Bearer auth and anthropic-beta header
         if anthropic_api_key.startswith("sk-ant-oat01-"):
             custom_headers["authorization"] = f"Bearer {anthropic_api_key}"
-            # Mark that we need to filter out client's x-api-key
-            exclude_auth_headers = True
+            # Don't forward headers - we'll add required headers manually
+            # This prevents the client's x-api-key from being forwarded
+            forward_headers = False
+            # Copy essential headers from request
+            for header_name in ["content-type", "accept", "anthropic-version", "anthropic-beta", "user-agent"]:
+                if header_name in request.headers:
+                    custom_headers[header_name] = request.headers[header_name]
         elif (
             "authorization" not in request.headers
             and "x-api-key" not in request.headers
         ):
             custom_headers["x-api-key"] = "{}".format(anthropic_api_key)
 
-    # For OAuth, we need to forward headers but filter out client's x-api-key
-    # since we're using Bearer auth instead
-    if exclude_auth_headers:
-        # Filter out x-api-key from request headers before forwarding
-        filtered_request = type(request)(
-            scope={
-                **request.scope,
-                "headers": [
-                    (k, v) for k, v in request.scope.get("headers", [])
-                    if k.lower() != b"x-api-key"
-                ]
-            },
-            receive=request.receive,
-            send=request._send if hasattr(request, '_send') else None
-        )
-    else:
-        filtered_request = request
-
     ## CREATE PASS-THROUGH
     endpoint_func = create_pass_through_route(
         endpoint=endpoint,
         target=str(updated_url),
         custom_headers=custom_headers,
-        _forward_headers=True,
+        _forward_headers=forward_headers,
         is_streaming_request=is_streaming_request,
     )  # dynamically construct pass-through endpoint based on incoming path
     received_value = await endpoint_func(
-        filtered_request,
+        request,
         fastapi_response,
         user_api_key_dict,
     )
