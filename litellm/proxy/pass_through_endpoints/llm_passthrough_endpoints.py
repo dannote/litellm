@@ -607,6 +607,8 @@ async def anthropic_proxy_route(
         # Claude Code OAuth tokens require Bearer auth
         if anthropic_api_key.startswith("sk-ant-oat01-"):
             custom_headers["authorization"] = f"Bearer {anthropic_api_key}"
+            # Also set x-api-key to override any forwarded client key
+            custom_headers["x-api-key"] = anthropic_api_key
         elif (
             "authorization" not in request.headers
             and "x-api-key" not in request.headers
