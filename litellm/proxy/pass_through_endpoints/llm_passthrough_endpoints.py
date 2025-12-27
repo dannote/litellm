@@ -602,31 +602,49 @@ async def anthropic_proxy_route(
 
     ## Build custom headers
     custom_headers = {}
-    forward_headers = True
+    # Headers to exclude from forwarding (will be overridden by custom_headers)
+    exclude_auth_headers = False
 
     if anthropic_api_key is not None:
-        # Claude Code OAuth tokens require Bearer auth
+        # Claude Code OAuth tokens require Bearer auth and anthropic-beta header
         if anthropic_api_key.startswith("sk-ant-oat01-"):
             custom_headers["authorization"] = f"Bearer {anthropic_api_key}"
-            # Don't forward client headers when using OAuth - the x-api-key from client
-            # would be forwarded and Anthropic rejects OAuth tokens in x-api-key header
-            forward_headers = False
+            # Mark that we need to filter out client's x-api-key
+            exclude_auth_headers = True
         elif (
             "authorization" not in request.headers
             and "x-api-key" not in request.headers
         ):
             custom_headers["x-api-key"] = "{}".format(anthropic_api_key)
 
+    # For OAuth, we need to forward headers but filter out client's x-api-key
+    # since we're using Bearer auth instead
+    if exclude_auth_headers:
+        # Filter out x-api-key from request headers before forwarding
+        filtered_request = type(request)(
+            scope={
+                **request.scope,
+                "headers": [
+                    (k, v) for k, v in request.scope.get("headers", [])
+                    if k.lower() != b"x-api-key"
+                ]
+            },
+            receive=request.receive,
+            send=request._send if hasattr(request, '_send') else None
+        )
+    else:
+        filtered_request = request
+
     ## CREATE PASS-THROUGH
     endpoint_func = create_pass_through_route(
         endpoint=endpoint,
         target=str(updated_url),
         custom_headers=custom_headers,
-        _forward_headers=forward_headers,
+        _forward_headers=True,
         is_streaming_request=is_streaming_request,
     )  # dynamically construct pass-through endpoint based on incoming path
     received_value = await endpoint_func(
-        request,
+        filtered_request,
         fastapi_response,
         user_api_key_dict,
     )
